@@ -2,7 +2,7 @@
 
 An MIT-licensed fork of [Node Factor by CalfMoon](https://github.com/calfmoon/node-factor), based on upstream commit `b04d2e77c9d4434f6971778f0ff5a28b6c4f00cd`.
 
-Set one graph size weight for every note in a folder. Rules apply to new notes too. Supports desktop and mobile Obsidian (minimum 1.8.0), with no Node.js or Electron runtime dependency. The plugin uses Obsidian's **internal graph renderer**, which can change between Obsidian versions. Actual iOS/Android/desktop UI testing is still required; automated tests use a simulated renderer.
+Set one graph size weight for every note in a folder. Rules apply to new notes too. Supports desktop and mobile Obsidian (minimum 1.8.0), with no Node.js or Electron runtime dependency. The plugin uses Obsidian's **internal graph renderer**, which can change between Obsidian versions. Automated tests use a simulated renderer. See the user-reported device check below; other platform/version combinations still need device testing.
 
 ## Install
 
@@ -26,6 +26,10 @@ Priority: **manual note size → exception (automatic size) → deepest matching
 Both global and local graphs update when settings or vault metadata change. Events are grouped over 150 ms. A fallback checks graph topology every two seconds to discover new or replaced nodes, reusing cached weights when nothing changed. Checks pause while the document is hidden. The fallback still scans nodes and links, so large graphs have a cost; battery improvements have not been measured on a device. Rules follow file/folder renames made through Obsidian. Removing a rule restores inherited or automatic sizing. Notes are never edited; settings live in the plugin's `data.json`. This fork has a separate plugin ID and does not automatically import the original plugin's settings.
 
 If a graph renderer or node shape is incompatible, the affected renderer is skipped and one notice is shown. If updating it throws, the plugin attempts to restore its original weights and stops touching that renderer until it is recreated or the plugin is restarted. Rules are retained. These checks cannot detect every visual or semantic API change.
+
+## Reported device compatibility
+
+The user reports that the plugin works well on an iPhone running **iOS 27.0.1** and **Obsidian 1.14.5**, following the 1.0.2 release. Versions are recorded as supplied by the user. The exact test scenarios and installed plugin version were not separately confirmed; this is a user-reported check, not an exhaustive compatibility or battery benchmark.
 
 ## Verify on your devices
 
