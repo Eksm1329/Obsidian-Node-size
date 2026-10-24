@@ -1,7 +1,7 @@
 {
   "id": "folder-node-size",
   "name": "Folder Node Size",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minAppVersion": "1.8.0",
   "description": "Set graph node sizes by folder, with subfolder rules and per-note exceptions.",
   "author": "Eksm1329; based on Node Factor by CalfMoon",

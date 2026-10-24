@@ -23,7 +23,9 @@ In Settings → Folder Node Size:
 
 Priority: **manual note size → exception (automatic size) → deepest matching folder → automatic size**. The automatic calculation retains the original plugin's link and file-size controls. Size is a graph weight, not a pixel radius; Obsidian's graph node-size slider also affects appearance. Exceptions are individual notes; a separate nested-folder rule can give a whole subfolder another size.
 
-Both global and local graphs are updated approximately once per second, including newly created graph nodes. Rules follow file/folder renames made through Obsidian. Removing a rule restores inherited or automatic sizing. Notes are never edited; settings live in the plugin's `data.json`. This fork has a separate plugin ID and does not automatically import the original plugin's settings.
+Both global and local graphs update when settings or vault metadata change. Events are grouped over 150 ms. A fallback checks graph topology every two seconds to discover new or replaced nodes, reusing cached weights when nothing changed. Checks pause while the document is hidden. The fallback still scans nodes and links, so large graphs have a cost; battery improvements have not been measured on a device. Rules follow file/folder renames made through Obsidian. Removing a rule restores inherited or automatic sizing. Notes are never edited; settings live in the plugin's `data.json`. This fork has a separate plugin ID and does not automatically import the original plugin's settings.
+
+If a graph renderer or node shape is incompatible, the affected renderer is skipped and one notice is shown. If updating it throws, the plugin attempts to restore its original weights and stops touching that renderer until it is recreated or the plugin is restarted. Rules are retained. These checks cannot detect every visual or semantic API change.
 
 ## Verify on your devices
 
@@ -44,7 +46,7 @@ npm run build
 
 `npm run dev` watches and rebuilds `main.js`. Copy the three plugin files into a test vault to run inside Obsidian. Automated tests cover rule priority, path boundaries, root folders, new notes, exceptions, renames, multiple graph views and unload restoration. They do not replace device testing.
 
-Pushing a version tag such as `1.0.0` triggers the release workflow after tests, lint and build succeed. Version tags must match `manifest.json`.
+Pushing a version tag such as `1.0.1` triggers the release workflow after tests, lint and build succeed. Version tags must match `manifest.json`.
 
 ## License
 

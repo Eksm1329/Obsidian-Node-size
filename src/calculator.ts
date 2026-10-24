@@ -1,3 +1,4 @@
+import { isNode } from "./graph";
 import { ruleWeight } from "./rules";
 import { App } from "obsidian";
 
@@ -20,7 +21,7 @@ export default class Calculations {
 		if (override !== undefined) return override;
 
 		weight += Object.keys(node.reverse).length * settings.bwdMultiplier;
-		if (settings.fwdTree) {
+		if (settings.fwdTree && settings.fwdMultiplier !== 0) {
 			weight +=
 				this.fwdNodeTreeSize(node, new Set()) * settings.fwdMultiplier;
 		} else {
@@ -45,19 +46,18 @@ export default class Calculations {
 		node: ObsidianNode,
 		antiLoopSet: Set<string>,
 	): number {
-		let size = 0;
-		antiLoopSet.add(node.id);
-
-		Object.entries(node.forward).forEach(([key, value]) => {
-			const childNode: ObsidianNode = value.target;
-
-			// Prevents looping if A -> B -> C -> D -> B
-			if (!antiLoopSet.has(key)) {
-				size++;
-				const childSize = this.fwdNodeTreeSize(childNode, antiLoopSet);
-				size += childSize;
-			}
-		});
-		return size;
-	}
+        const stack: ObsidianNode[] = [node];
+        antiLoopSet.add(node.id);
+        while (stack.length) {
+            const current = stack.pop()!;
+            for (const edge of Object.values(current.forward)) {
+                const child: unknown = edge?.target;
+                if (!isNode(child)) throw new Error("Unsupported graph link target");
+                if (antiLoopSet.has(child.id)) continue;
+                antiLoopSet.add(child.id);
+                stack.push(child);
+            }
+        }
+        return antiLoopSet.size - 1;
+    }
 }
