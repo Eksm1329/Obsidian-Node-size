@@ -1,0 +1,35 @@
+name: Build and release
+on:
+  push:
+    branches: [main]
+    tags: ['*.*.*']
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run lint
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: folder-node-size
+          path: |
+            main.js
+            manifest.json
+            styles.css
+      - name: Publish tagged version
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" main.js manifest.json styles.css --title "Folder Node Size $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md

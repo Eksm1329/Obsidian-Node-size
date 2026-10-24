@@ -1,0 +1,7 @@
+.node-size-settings .setting-item-control { flex-wrap: wrap; gap: 8px; }
+.node-size-settings .setting-item-info { overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+ .node-size-settings .setting-item { flex-direction: column; align-items: stretch; gap: 12px; }
+ .node-size-settings .setting-item-control { justify-content: flex-start; }
+ .node-size-settings input[type="search"], .node-size-settings input[type="text"] { max-width: 100%; }
+}
