@@ -21,7 +21,6 @@ export default class ManualSetting {
 
 	constructor(
 		app: App,
- TFile,
 		plugin: NodeFactor,
 		containerEl: HTMLElement,
 		refreshDisplay: () => void,

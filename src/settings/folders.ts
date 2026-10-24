@@ -1,4 +1,5 @@
 import { App, AbstractInputSuggest, Notice, Setting, TFolder, TFile } from "obsidian";
+import FileSuggest from "./file-suggest";
 import type NodeFactor from "../main";
 class FolderSuggest extends AbstractInputSuggest<string> {
  constructor(app: App, private input: HTMLInputElement) { super(app, input); }
@@ -34,7 +35,7 @@ export function folderSettings(plugin: NodeFactor, el: HTMLElement, refresh: () 
  new Setting(el).setName("Folder rule exceptions").setHeading();
  let excluded = "";
  new Setting(el).setName("Use automatic size for a note").setDesc("Enter its full vault path, including .md. A manual size still takes priority.")
-  .addText(t => t.setPlaceholder("Folder/Note.md").onChange(v => {excluded=v.trim();}))
+  .addSearch(t => { new FileSuggest(plugin.app, t.inputEl); t.setPlaceholder("Folder/Note.md").onChange(v => {excluded=v.trim();}); })
   .addButton(b => b.setButtonText("Exclude").onClick(async () => {
    if (!(plugin.app.vault.getAbstractFileByPath(excluded) instanceof TFile)) {new Notice("Choose an existing note."); return;}
    if (!plugin.settings.exclusions.includes(excluded)) plugin.settings.exclusions.push(excluded);
