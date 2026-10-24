@@ -1,5 +1,5 @@
 import { isNode } from "./graph";
-import { ruleWeight } from "./rules";
+import { RuleIndex } from "./rules";
 import { App } from "obsidian";
 
 import { NodeFactorSettings, ObsidianNode } from "types";
@@ -7,17 +7,19 @@ import { NodeFactorSettings, ObsidianNode } from "types";
 export default class Calculations {
 	private app: App;
 	private settings: NodeFactorSettings;
+ private rules: RuleIndex;
 
 	constructor(app: App, settings: NodeFactorSettings) {
 		this.app = app;
 		this.settings = settings;
+ this.rules = new RuleIndex(settings);
 	}
 
 	calcNodeWeight(node: ObsidianNode): number {
 		const settings = this.settings;
 		let weight = 0;
 
-		const override = ruleWeight(node.id, settings);
+		const override = this.rules.weight(node.id);
 		if (override !== undefined) return override;
 
 		weight += Object.keys(node.reverse).length * settings.bwdMultiplier;

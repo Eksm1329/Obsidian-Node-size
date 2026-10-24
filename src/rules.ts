@@ -7,14 +7,34 @@ export function matchesFolder(file: string, folder: string, recursive: boolean):
  return rest.length > 0 && (recursive || !rest.includes("/"));
 }
 
-/** Manual sizes win; excluded files use automatic calculation. Deepest folder wins. */
+/** Index rules once per settings revision. Lookup cost depends on path depth, not rule count. */
+export class RuleIndex {
+ private manual: Map<string, number>;
+ private exclusions: Set<string>;
+ private folders: Map<string, NodeFactorSettings["folders"][number]>;
+ constructor(settings: NodeFactorSettings) {
+  this.manual = new Map(settings.manual.map(entry => [entry.id, entry.weight]));
+  this.exclusions = new Set(settings.exclusions);
+  this.folders = new Map(settings.folders.map(rule => [rule.path, rule]));
+ }
+ weight(file: string): number | undefined {
+  if (this.manual.has(file)) return this.manual.get(file);
+  if (this.exclusions.has(file)) return undefined;
+  let end = file.lastIndexOf("/");
+  let direct = true;
+  while (true) {
+   const folder = end < 0 ? "/" : file.slice(0, end);
+   const rule = this.folders.get(folder);
+   if (rule && (direct || rule.recursive)) return rule.weight;
+   if (end < 0) return undefined;
+   end = end > 0 ? file.lastIndexOf("/", end - 1) : -1;
+   direct = false;
+  }
+ }
+}
+
 export function ruleWeight(file: string, settings: NodeFactorSettings): number | undefined {
- const manual = settings.manual.find(entry => entry.id === file);
- if (manual) return manual.weight;
- if (settings.exclusions.includes(file)) return undefined;
- const rule = settings.folders.filter(r => matchesFolder(file, r.path, r.recursive))
-  .sort((a, b) => b.path.split("/").filter(Boolean).length - a.path.split("/").filter(Boolean).length)[0];
- return rule?.weight;
+ return new RuleIndex(settings).weight(file);
 }
 
 export function movedPath(path: string, oldPath: string, newPath: string): string {

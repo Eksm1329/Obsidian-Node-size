@@ -21,5 +21,5 @@ export function isRenderer(value: unknown): value is GraphRenderer {
 
 // The renderer mutates link maps in place. Compare contents, not just references.
 export function topology(nodes: ObsidianNode[]): string {
- return JSON.stringify(nodes.map(node => [node.id, Object.keys(node.forward).sort(), Object.keys(node.reverse).sort()]));
+ return JSON.stringify(nodes.map(node => [node.id, Object.keys(node.forward), Object.keys(node.reverse)]));
 }

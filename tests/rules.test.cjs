@@ -92,3 +92,52 @@ test('unload cancels queued graph updates',()=>{
  host.window={setTimeout(fn){callback=fn;return 42;},clearTimeout(id){cancelled=id;}};
  try {f.plugin.schedule();f.plugin.onunload();assert.equal(cancelled,42);callback();assert.equal(f.reads(),0);} finally {delete host.window;}
 });
+const settingsBundle=esbuild.buildSync({entryPoints:['src/settings-data.ts'],bundle:true,format:'cjs',platform:'browser',write:false});
+const settingsHost={module:{exports:{}},exports:{}};
+vm.runInNewContext(settingsBundle.outputFiles[0].text,settingsHost);
+const {readSettings}=settingsHost.module.exports;
+test('invalid and unknown saved values cannot poison settings',()=>{
+ const s=readSettings(JSON.parse('{"__proto__":{"polluted":true},"fwdMultiplier":-1,"lettersPerWt":"10","manual":{},"folders":[null,{"path":"Work","weight":-10}],"exclusions":[3,null,"Work/A.md"]}'));
+ assert.equal(s.fwdMultiplier,1);assert.equal(s.lettersPerWt,0);assert.equal(s.manual.length,0);assert.equal(s.folders.length,0);
+ assert.equal(s.exclusions.length,1);assert.equal(s.polluted,undefined);assert.equal(Object.prototype.polluted,undefined);
+});
+test('valid legacy settings survive normalization with independent snapshots',()=>{
+ const original={...settings(),fwdTree:true,fwdMultiplier:2,manual:[{id:'Work/A.md',weight:0}]};
+ const a=readSettings(original),b=readSettings(original);a.folders[0].weight=99;
+ assert.equal(b.folders[0].weight,20);assert.equal(b.manual[0].weight,0);assert.equal(b.fwdTree,true);
+});
+test('unreadable settings stop loading and cannot be overwritten',async()=>{
+ const p=new Plugin();let writes=0;p.loadData=async()=>{throw Error('invalid JSON');};p.saveData=async()=>{writes++;};
+ await p.loadSettings();await p.saveSettings();assert.equal(writes,0);assert.equal(p.stopped,true);
+});
+test('concurrent saves preserve order and snapshot each edit',async()=>{
+ const f=fixture();const saved=[];let release;
+ f.plugin.saveData=async value=>{saved.push(value);if(saved.length===1) await new Promise(resolve=>{release=resolve;});};
+ f.plugin.settings.fwdMultiplier=2;const first=f.plugin.saveSettings();
+ f.plugin.settings.fwdMultiplier=3;const second=f.plugin.saveSettings();
+ await Promise.resolve();assert.equal(saved.length,1);assert.equal(saved[0].fwdMultiplier,2);
+ release();await Promise.all([first,second]);assert.equal(saved[1].fwdMultiplier,3);
+});
+test('failed save is handled and does not prevent later successful save',async()=>{
+ const f=fixture();let calls=0;f.plugin.saveData=async()=>{if(++calls===1)throw Error('disk full');};
+ await f.plugin.saveSettings();assert.equal(f.plugin.writeFailed,true);
+ await f.plugin.saveSettings();assert.equal(calls,2);assert.equal(f.plugin.writeFailed,false);
+});
+test('indexed rules preserve precedence across thousands of sibling folders',()=>{
+ const s=settings();for(let i=0;i<10000;i++)s.folders.push({path:`Many/F${i}`,recursive:true,weight:i%100});
+ const index=new sandbox.module.exports.RuleIndex(s);
+ for(let i=0;i<10000;i++)assert.equal(index.weight(`Many/F${i}/Nested/A.md`),i%100);
+ assert.equal(index.weight('Work/Sub/A.md'),40);assert.equal(index.weight('Many/F10000/A.md'),undefined);
+});
+test('throwing renderer accessors cannot break graph updates or unloading',()=>{
+ const f=fixture();f.plugin.app.workspace.getLeavesOfType=()=>[{view:{get renderer(){throw Error('closing view');}}}];
+ assert.doesNotThrow(()=>f.plugin.recalculateSize());assert.doesNotThrow(()=>f.plugin.onunload());
+});
+test('removed graph nodes are restored and released',()=>{
+ const f=fixture();f.plugin.recalculateSize();assert.equal(f.node.weight,10);
+ f.renderer.nodes=[];f.plugin.recalculateSize();assert.equal(f.node.weight,7);assert.equal(f.plugin.originals.size,0);
+});
+test('unexpected leading separators cannot trap rule lookup in a loop',()=>{
+ const index=new sandbox.module.exports.RuleIndex(settings());
+ assert.equal(index.weight('/Unexpected.md'),undefined);assert.equal(index.weight('/'),undefined);
+});

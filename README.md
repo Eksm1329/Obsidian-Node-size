@@ -51,3 +51,11 @@ Pushing a version tag such as `1.0.1` triggers the release workflow after tests,
 ## License
 
 MIT. Original Node Factor copyright retained in [LICENSE](LICENSE).
+
+## Reliability and performance
+
+Saved data is read through an explicit schema: invalid numbers and entries are ignored, and unknown fields are not merged into settings. If the settings file cannot be read, plugin startup pauses rather than overwriting it with defaults. Saves are serialized with independent snapshots. A storage failure displays a notice; after resolving it, editing a setting retries saving. This cannot make filesystem writes atomic or prevent cross-device sync conflicts.
+
+Folder and manual rules are indexed once per calculation batch; lookup scales with folder depth. Unchanged graph checks do not construct a new rule index or sort link keys. Detached graph nodes are restored where possible and released.
+
+Run `node scripts/benchmark.cjs` for a reproducible synthetic comparison of the previous rule lookup with the index (5,000 rules and 5,000 notes). On the cloud runner one measured run took 1,999 ms versus 3.6 ms including index construction, with matching results. This is not an end-to-end rendering or mobile battery benchmark. Graph structure scans and full link-tree traversal remain potentially expensive on very large graphs.

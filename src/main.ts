@@ -1,5 +1,6 @@
+import { readSettings } from "./settings-data";
 import { Notice, Plugin } from "obsidian";
-import { ObsidianNode, NodeFactorSettings, DEFAULT_SETTINGS } from "types";
+import { ObsidianNode, NodeFactorSettings } from "types";
 import NodeFactorSettingTab from "settings";
 import Calculator from "calculator";
 import { movedPath } from "./rules";
@@ -17,9 +18,12 @@ export default class NodeFactor extends Plugin {
  private stopped = false;
  private warned = false;
  private pending: number | undefined;
+ private writes: Promise<void> = Promise.resolve();
+ private writeFailed = false;
 
  async onload() {
   await this.loadSettings();
+  if (this.stopped) return;
   this.addSettingTab(new NodeFactorSettingTab(this.app, this));
   this.app.workspace.onLayoutReady(() => {
    if (this.stopped) return;
@@ -67,11 +71,15 @@ export default class NodeFactor extends Plugin {
   const result: GraphRenderer[] = [];
   for (const type of ["graph", "localgraph"]) {
    for (const leaf of this.app.workspace.getLeavesOfType(type)) {
-    const renderer: unknown = (leaf.view as unknown as { renderer?: unknown }).renderer;
-    // An absent renderer is normal while a view is opening.
-    if (renderer == null) continue;
-    if (!isRenderer(renderer)) { this.warn(); continue; }
-    if (!this.failed.has(renderer)) result.push(renderer);
+    try {
+     const renderer: unknown = (leaf.view as unknown as { renderer?: unknown }).renderer;
+     // An absent renderer is normal while a view is opening.
+     if (renderer == null) continue;
+     if (!isRenderer(renderer)) { this.warn(); continue; }
+     if (!this.failed.has(renderer)) result.push(renderer);
+    } catch {
+     this.warn();
+    }
    }
   }
   return result;
@@ -87,7 +95,7 @@ export default class NodeFactor extends Plugin {
 
  recalculateSize() {
   if (this.stopped || (typeof document !== "undefined" && document.hidden)) return;
-  const calculator = new Calculator(this.app, this.settings);
+  let calculator: Calculator | undefined;
   const live = new Set<ObsidianNode>();
   for (const renderer of this.renderers()) {
    try {
@@ -96,6 +104,7 @@ export default class NodeFactor extends Plugin {
     const signature = topology(nodes);
     let cached = this.cache.get(renderer);
     if (!cached || cached.revision !== this.revision || cached.topology !== signature) {
+     calculator ??= new Calculator(this.app, this.settings);
      const weights = new Map<string, number>();
      for (const node of nodes) {
       const weight = calculator.calcNodeWeight(node);
@@ -123,7 +132,10 @@ export default class NodeFactor extends Plugin {
     this.warn();
    }
   }
-  for (const node of this.originals.keys()) if (!live.has(node)) this.originals.delete(node);
+  for (const [node, value] of this.originals) if (!live.has(node)) {
+   try { if (node.weight === value.applied) node.weight = value.original; } catch { /* Detached host node. */ }
+   this.originals.delete(node);
+  }
  }
 
  onunload() {
@@ -136,14 +148,29 @@ export default class NodeFactor extends Plugin {
   }
  }
  async loadSettings() {
-  this.settings = Object.assign({}, DEFAULT_SETTINGS, (await this.loadData()) as Partial<NodeFactorSettings> | null);
-  this.settings.manual = [...(this.settings.manual ?? [])];
-  this.settings.folders = [...(this.settings.folders ?? [])];
-  this.settings.exclusions = [...(this.settings.exclusions ?? [])];
+  try {
+   this.settings = readSettings(await this.loadData());
+  } catch {
+   // Do not replace an unreadable settings file with defaults on the next UI edit.
+   this.stopped = true;
+   new Notice("Could not read plugin settings. Changes are paused to protect the saved file. Restart after resolving the storage or sync error.", 10000);
+  }
  }
  async saveSettings() {
-  await this.saveData(this.settings);
+  if (this.stopped) return;
+  const snapshot = readSettings(this.settings);
   this.revision++;
   this.recalculateSize();
+  // Each edit has an independent snapshot; writes finish in the order requested.
+  this.writes = this.writes.then(async () => {
+   try {
+    await this.saveData(snapshot);
+    this.writeFailed = false;
+   } catch {
+    if (!this.writeFailed) new Notice("Could not save plugin settings. Changes work for this session only. Check storage and sync, then change a setting to retry.", 10000);
+    this.writeFailed = true;
+   }
+  });
+  await this.writes;
  }
 }
