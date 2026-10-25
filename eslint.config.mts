@@ -22,6 +22,7 @@ export default tseslint.config(
 		},
 	},
 	...obsidianmd.configs.recommended,
+ { files: ["scripts/**/*.cjs", "tests/**/*.cjs"], languageOptions: { globals: globals.node } },
  // Retain APIs supported by Obsidian 1.8–1.12 as well as newer versions.
  { rules: { "@typescript-eslint/no-deprecated": "off" } },
 	globalIgnores([

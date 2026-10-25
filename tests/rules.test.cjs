@@ -141,3 +141,85 @@ test('unexpected leading separators cannot trap rule lookup in a loop',()=>{
  const index=new sandbox.module.exports.RuleIndex(settings());
  assert.equal(index.weight('/Unexpected.md'),undefined);assert.equal(index.weight('/'),undefined);
 });
+function multiFixture(tree=false) {
+ const plugin=new Plugin();plugin.settings={manual:[],folders:[],exclusions:[],fwdMultiplier:1,bwdMultiplier:1,lettersPerWt:1,fwdTree:tree};
+ const nodes=['A','B','C','D'].map(id=>({id:`Work/${id}.md`,weight:7,forward:{},reverse:{}}));
+ const sizes=new Map(nodes.map(n=>[n.id,10]));const reads=[];
+ const renderer={nodes,changed(){}};
+ plugin.app={workspace:{getLeavesOfType:type=>type==='graph'?[{view:{renderer}}]:[]},vault:{getFileByPath(id){reads.push(id);return {extension:'md',stat:{size:sizes.get(id)}};}}};
+ plugin.saveData=async()=>{};
+ const link=(a,b)=>{nodes[a].forward[nodes[b].id]={target:nodes[b]};nodes[b].reverse[nodes[a].id]={};};
+ const update=path=>{host.window={setTimeout(){return 1;}};try{plugin.invalidate(path);plugin.recalculateSize();}finally{delete host.window;}};
+ return {plugin,nodes,sizes,reads,link,update};
+}
+test('text edit recalculates only the edited automatic note',()=>{
+ const f=multiFixture();f.plugin.recalculateSize();f.reads.length=0;f.sizes.set(f.nodes[1].id,20);f.update(f.nodes[1].id);
+ assert.deepEqual(f.reads,[f.nodes[1].id]);assert.equal(f.nodes[1].weight,20);assert.equal(f.nodes[0].weight,10);
+});
+test('folder rule edit leaves unrelated automatic notes cached',async()=>{
+ const f=multiFixture();f.nodes[0].id='Fixed/A.md';f.plugin.settings.folders=[{path:'Fixed',weight:20,recursive:true}];
+ f.plugin.recalculateSize();f.reads.length=0;f.plugin.settings.folders[0].weight=40;await f.plugin.saveSettings();
+ assert.equal(f.nodes[0].weight,40);assert.equal(f.reads.length,0);
+});
+test('fixed notes do not enumerate links or read contents even in tree mode',()=>{
+ const f=multiFixture(true);f.plugin.settings.folders=[{path:'Work',weight:25,recursive:true}];
+ const forbidden=new Proxy({}, {ownKeys(){throw Error('fixed links must not be scanned');}});
+ for(const n of f.nodes){n.forward=forbidden;n.reverse=forbidden;}
+ f.plugin.recalculateSize();f.plugin.recalculateSize();f.update(f.nodes[0].id);
+ assert.equal(f.reads.length,0);assert.ok(f.nodes.every(n=>n.weight===25));
+});
+test('local link edits recalculate endpoints but not unrelated notes',()=>{
+ const f=multiFixture();f.plugin.recalculateSize();f.reads.length=0;f.link(0,1);f.plugin.recalculateSize();
+ assert.deepEqual(f.reads,[f.nodes[0].id,f.nodes[1].id]);assert.equal(f.nodes[0].weight,11);assert.equal(f.nodes[1].weight,11);
+});
+test('tree edits propagate to ancestors through fixed intermediates, preserving unrelated caches',()=>{
+ const f=multiFixture(true);f.link(0,1);f.plugin.settings.manual=[{id:f.nodes[1].id,weight:50}];
+ f.plugin.recalculateSize();f.reads.length=0;f.link(1,2);f.plugin.recalculateSize();
+ assert.equal(f.nodes[0].weight,12);assert.equal(f.nodes[1].weight,50);assert.equal(f.nodes[2].weight,11);
+ assert.ok(!f.reads.includes(f.nodes[3].id));
+ delete f.nodes[1].forward[f.nodes[2].id];delete f.nodes[2].reverse[f.nodes[1].id];f.plugin.recalculateSize();assert.equal(f.nodes[0].weight,11);
+});
+test('same-degree tree rewiring invalidates ancestors and detects off-screen descendants',()=>{
+ const f=multiFixture(true);f.link(0,1);f.link(1,2);
+ const renderer={nodes:[f.nodes[0]],changed(){}};
+ f.plugin.app.workspace.getLeavesOfType=type=>type==='graph'?[{view:{renderer}}]:[];
+ f.plugin.recalculateSize();assert.equal(f.nodes[0].weight,12);
+ delete f.nodes[1].forward[f.nodes[2].id];f.nodes[1].forward[f.nodes[3].id]={target:f.nodes[3]};f.link(3,2);
+ f.plugin.recalculateSize();assert.equal(f.nodes[0].weight,13);
+});
+test('removing a rule and adding an exception restores automatic weights',async()=>{
+ const f=multiFixture();f.plugin.settings.folders=[{path:'Work',weight:80,recursive:true}];f.plugin.recalculateSize();
+ f.plugin.settings.exclusions=[f.nodes[0].id];await f.plugin.saveSettings();assert.equal(f.nodes[0].weight,10);assert.equal(f.nodes[1].weight,80);
+ f.plugin.settings.folders=[];await f.plugin.saveSettings();assert.ok(f.nodes.every(n=>n.weight===10));
+});
+const calculatorBundle=esbuild.buildSync({entryPoints:['src/calculator.ts'],bundle:true,format:'cjs',platform:'browser',external:['obsidian'],write:false});
+const calculatorHost={module:{exports:{}},exports:{},require:host.require};
+vm.runInNewContext(calculatorBundle.outputFiles[0].text,calculatorHost);
+const FullCalculator=calculatorHost.module.exports.default;
+test('incremental results match full recalculation through mixed graph and settings edits',async()=>{
+ for(const tree of [false,true]) {
+  const f=multiFixture(tree);f.link(0,1);f.link(1,2);f.link(2,0);
+  for(let step=0;step<40;step++) {
+   const a=step%4,b=(step*3+1)%4;
+   if(step%5===0){f.plugin.settings.manual=step%10===0?[{id:f.nodes[a].id,weight:20}]:[];await f.plugin.saveSettings();}
+   else if(step%5===1){f.sizes.set(f.nodes[a].id,step+30);f.update(f.nodes[a].id);}
+   else if(step%5===2){if(a!==b)f.link(a,b);}
+   else if(step%5===3){delete f.nodes[a].forward[f.nodes[b].id];delete f.nodes[b].reverse[f.nodes[a].id];}
+   else {f.plugin.settings.bwdMultiplier=step%3;await f.plugin.saveSettings();}
+   f.plugin.recalculateSize();const calculator=new FullCalculator(f.plugin.app,f.plugin.settings);
+   for(const node of f.nodes)assert.equal(node.weight,calculator.calcNodeWeight(node),`tree=${tree}, step=${step}, node=${node.id}`);
+  }
+ }
+});
+
+test('global and local automatic weights remain independent for identical paths',()=>{
+ const f=fixture();const localNode={...f.node,forward:{},reverse:{'Other/B.md':{}}};
+ const local={nodes:[localNode],changed(){}};
+ f.plugin.app.workspace.getLeavesOfType=type=>[{view:{renderer:type==='graph'?f.renderer:local}}];
+ f.plugin.recalculateSize();f.plugin.recalculateSize();assert.equal(f.node.weight,10);assert.equal(localNode.weight,11);
+});
+test('same-length membership replacement evicts the removed ID',()=>{
+ const f=fixture();f.plugin.recalculateSize();
+ f.renderer.nodes=[{...f.node,id:'Other/B.md',weight:1}];f.plugin.recalculateSize();
+ const reads=f.reads();f.renderer.nodes=[f.node];f.plugin.recalculateSize();assert.equal(f.reads(),reads+1);
+});

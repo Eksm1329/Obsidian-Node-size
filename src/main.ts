@@ -2,19 +2,22 @@ import { readSettings } from "./settings-data";
 import { Notice, Plugin } from "obsidian";
 import { ObsidianNode, NodeFactorSettings } from "types";
 import NodeFactorSettingTab from "settings";
-import Calculator from "calculator";
+import { GraphWeights } from "./weights";
 import { movedPath } from "./rules";
-import { GraphRenderer, isNode, isRenderer, topology } from "./graph";
+import { GraphRenderer, isNode, isRenderer } from "./graph";
 
 type Original = { original: number; applied: number; renderer: GraphRenderer };
-type CachedGraph = { revision: number; topology: string; weights: Map<string, number> };
+
 
 export default class NodeFactor extends Plugin {
  settings: NodeFactorSettings;
  private originals = new Map<ObsidianNode, Original>();
- private cache = new WeakMap<GraphRenderer, CachedGraph>();
+ private cache = new WeakMap<GraphRenderer, GraphWeights>();
  private failed = new WeakSet<object>();
  private revision = 0;
+ private forceRevision = 0;
+ private contentSequence = 0;
+ private contentVersions = new Map<string, number>();
  private stopped = false;
  private warned = false;
  private pending: number | undefined;
@@ -33,14 +36,15 @@ export default class NodeFactor extends Plugin {
    this.registerInterval(window.setInterval(() => this.recalculateSize(), 2000));
   });
   this.registerEvent(this.app.workspace.on("layout-change", () => this.schedule()));
-  this.registerEvent(this.app.metadataCache.on("resolved", () => this.invalidate()));
-  this.registerEvent(this.app.vault.on("create", () => this.invalidate()));
-  this.registerEvent(this.app.vault.on("modify", () => this.invalidate()));
-  this.registerEvent(this.app.vault.on("delete", () => this.invalidate()));
+  this.registerEvent(this.app.metadataCache.on("resolved", () => this.schedule()));
+  this.registerEvent(this.app.vault.on("create", file => this.invalidate(file.path)));
+  this.registerEvent(this.app.vault.on("modify", file => this.invalidate(file.path)));
+  this.registerEvent(this.app.vault.on("delete", file => this.invalidate(file.path)));
   this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
    for (const rule of this.settings.folders) rule.path = movedPath(rule.path, oldPath, file.path);
    for (const entry of this.settings.manual) entry.id = movedPath(entry.id, oldPath, file.path);
    this.settings.exclusions = this.settings.exclusions.map(path => movedPath(path, oldPath, file.path));
+   this.contentVersions.set(file.path, ++this.contentSequence);
    void this.saveSettings();
   }));
   this.registerDomEvent(document, "visibilitychange", () => {
@@ -56,8 +60,9 @@ export default class NodeFactor extends Plugin {
   }, 150);
  }
 
- private invalidate() {
-  this.revision++;
+ private invalidate(path?: string) {
+  if (path === undefined) this.forceRevision++;
+  else this.contentVersions.set(path, ++this.contentSequence);
   this.schedule();
  }
 
@@ -95,33 +100,24 @@ export default class NodeFactor extends Plugin {
 
  recalculateSize() {
   if (this.stopped || (typeof document !== "undefined" && document.hidden)) return;
-  let calculator: Calculator | undefined;
   const live = new Set<ObsidianNode>();
   for (const renderer of this.renderers()) {
    try {
     if (!renderer.nodes.every(isNode)) throw new Error("Unsupported graph node shape");
     const nodes = renderer.nodes;
-    const signature = topology(nodes);
     let cached = this.cache.get(renderer);
-    if (!cached || cached.revision !== this.revision || cached.topology !== signature) {
-     calculator ??= new Calculator(this.app, this.settings);
-     const weights = new Map<string, number>();
-     for (const node of nodes) {
-      const weight = calculator.calcNodeWeight(node);
-      if (!Number.isFinite(weight) || weight < 0) throw new Error("Invalid graph weight");
-      weights.set(node.id, weight);
-     }
-     cached = { revision: this.revision, topology: signature, weights };
-     this.cache.set(renderer, cached);
-    }
+    if (!cached) { cached = new GraphWeights(); this.cache.set(renderer, cached); }
+    const weights = cached.update(nodes, this.settings, this.revision,
+     id => this.contentVersions.get(id) ?? 0, this.forceRevision, this.app);
     let changed = false;
     for (const node of nodes) {
      live.add(node);
-     const weight = cached.weights.get(node.id);
+     const weight = weights.get(node.id)?.weight;
      if (weight === undefined) continue;
      const previous = this.originals.get(node);
      const original = previous && node.weight === previous.applied ? previous.original : node.weight;
-     this.originals.set(node, { original, applied: weight, renderer });
+     if (!previous || previous.original !== original || previous.applied !== weight || previous.renderer !== renderer)
+      this.originals.set(node, { original, applied: weight, renderer });
      if (node.weight !== weight) { node.weight = weight; changed = true; }
     }
     if (changed) renderer.changed();
@@ -143,6 +139,7 @@ export default class NodeFactor extends Plugin {
   if (this.pending !== undefined) window.clearTimeout(this.pending);
   const renderers = this.renderers();
   this.restore();
+  this.contentVersions.clear();
   for (const renderer of renderers) {
    try { renderer.changed(); } catch { /* Host may already be closing the view. */ }
   }

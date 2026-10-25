@@ -1,6 +1,6 @@
 {
   "name": "folder-node-size",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Customize factors effecting node size in graph.",
   "main": "main.js",
   "scripts": {

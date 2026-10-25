@@ -1,15 +1,12 @@
-Folder Node Size 1.0.2
+Folder Node Size 1.0.3
 
-Reliability and performance improvements:
-- Validate saved settings, ignore invalid entries and preserve valid legacy rules.
-- Pause loading if settings cannot be read, preventing accidental replacement of unreadable data.
-- Serialize settings writes using independent snapshots; report save failures and allow retry.
-- Index folder and note rules; avoid scanning and sorting every rule for every node.
-- Avoid constructing rule indexes during unchanged graph checks and remove link-key sorting.
-- Isolate renderer getter failures; restore and release nodes removed from graphs.
+- Fast path for manual and folder sizes: skip content reads and link enumeration when not needed by an automatic tree ancestor.
+- Text edits invalidate only the changed note; metadata resolution no longer clears every cached weight.
+- Rule edits update only effective size changes; automatic parameter changes refresh automatic nodes.
+- Detect link-count changes selectively in normal mode and propagate tree changes through old/new ancestors, including off-screen descendants.
+- Preserve weights across renderer node replacement; maintain separate caches for global/local graphs.
+- Include reproducible before/after graph benchmarks for 1,000, 5,000 and 10,000 nodes, covering timing, longest synchronous updates, memory and result equality.
 
-Synthetic benchmark: 5,000 rules applied to 5,000 paths took 1,999 ms with the previous rule lookup and 3.6 ms with the index, including construction, on the cloud runner. Results match. This measures rule lookup only, not complete graph rendering or iPhone battery use.
+See benchmarks/REPORT.md in the repository for measurements and tradeoffs. Fully automatic tree-mode idle checks are more expensive in the measured workload, while note/rule updates are much faster; first tree calculations remain costly. Benchmarks use a Node host simulation, not a real Obsidian UI. Full automatic tree traversal remains costly on first load; strongly connected graphs may be much more expensive than the topic-cluster fixtures.
 
-Build, lint and automated regression tests pass. Graph topology scanning and optional full link-tree calculation still have costs on large graphs. Obsidian's graph API is internal; real-device compatibility cannot be guaranteed by these tests.
-
-Update via BRAT and restart Obsidian. No settings migration is required.
+Update through BRAT and restart Obsidian. Existing settings remain compatible. Submission to the official community catalog remains pending device testing.
