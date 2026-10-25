@@ -28,7 +28,6 @@ export default class ProgrameticalSetting {
 			slider.onChange(async (value) => {
 				this.plugin.settings.fwdMultiplier = value;
 				await this.plugin.saveSettings();
-				this.plugin.recalculateSize();
 			});
 		});
 
@@ -44,7 +43,6 @@ export default class ProgrameticalSetting {
 			toggle.onChange(async (value) => {
 				this.plugin.settings.fwdTree = value;
 				await this.plugin.saveSettings();
-				this.plugin.recalculateSize();
 			});
 		});
 
@@ -60,7 +58,6 @@ export default class ProgrameticalSetting {
 			slider.onChange(async (value) => {
 				this.plugin.settings.bwdMultiplier = value;
 				await this.plugin.saveSettings();
-				this.plugin.recalculateSize();
 			});
 		});
 
@@ -78,7 +75,6 @@ export default class ProgrameticalSetting {
 			slider.onChange(async (value) => {
 				this.plugin.settings.lettersPerWt = value;
 				await this.plugin.saveSettings();
-				this.plugin.recalculateSize();
 			});
 		});
 	}

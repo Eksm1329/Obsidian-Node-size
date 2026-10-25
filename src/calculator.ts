@@ -20,13 +20,13 @@ export default class Calculations {
         return override !== undefined ? override : this.calcAutomaticWeight(node);
     }
 
-    calcAutomaticWeight(node: ObsidianNode): number {
+    calcAutomaticWeight(node: ObsidianNode, descendants?: number): number {
         const settings = this.settings;
         let weight = 0;
 		weight += Object.keys(node.reverse).length * settings.bwdMultiplier;
 		if (settings.fwdTree && settings.fwdMultiplier !== 0) {
 			weight +=
-				this.fwdNodeTreeSize(node, new Set()) * settings.fwdMultiplier;
+				(descendants ?? this.fwdNodeTreeSize(node, new Set())) * settings.fwdMultiplier;
 		} else {
 			weight += Object.keys(node.forward).length * settings.fwdMultiplier;
 		}

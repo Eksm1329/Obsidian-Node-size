@@ -7,11 +7,11 @@ const {performance}=require('node:perf_hooks');
 const {execFileSync}=require('node:child_process');
 const crypto=require('node:crypto');
 const assert=require('node:assert/strict');
-const BASELINE='a956f01463837cc1897f169c99085fcf5779f273';
+const BASELINE='289f73730eeb153cb2c27584bbea673ab450939c';
 
 async function worker(bundle,n,tree,profile) {
- const timers=[];
- const host={module:{exports:{}},exports:{},window:{setTimeout(fn){timers.push(fn);return timers.length;},clearTimeout(){}},
+ const timers=[];let virtualOffset=0;
+ const host={setTimeout,clearTimeout,performance:{now:()=>performance.now()+virtualOffset},module:{exports:{}},exports:{},window:{setTimeout(fn){timers.push(fn);return timers.length;},clearTimeout(){}},
   require(name){assert.equal(name,'obsidian');return {Notice:class{constructor(message){throw Error(message);}},Plugin:class{},PluginSettingTab:class{},AbstractInputSuggest:class{}};}};
  vm.runInNewContext(fs.readFileSync(bundle,'utf8'),host);
  const Plugin=host.module.exports.default;
@@ -30,25 +30,26 @@ async function worker(bundle,n,tree,profile) {
  const plugin=new Plugin();plugin.settings=settings;plugin.saveData=async()=>{};
  plugin.app={workspace:{getLeavesOfType:type=>type==='graph'?[{view:{renderer}}]:[]},vault:{getFileByPath(id){reads++;return {extension:'md',stat:{size:sizes.get(id)}};}}};
  let blocks=[];
- const recalculate=plugin.recalculateSize.bind(plugin);
- plugin.recalculateSize=()=>{const begin=performance.now();recalculate();blocks.push(performance.now()-begin);};
+ const measuredMethod=typeof plugin.pump==='function'?'pump':'recalculateSize';
+ const measured=plugin[measuredMethod].bind(plugin);
+ plugin[measuredMethod]=()=>{const begin=performance.now();const result=measured();blocks.push(performance.now()-begin);return result;};
  global.gc();const initialHeap=process.memoryUsage().heapUsed;
  const output=[];
  async function measure(scenario,action,calls) {
   global.gc();const before=process.memoryUsage().heapUsed;blocks=[];const initialReads=reads,initialRedraws=redraws;
   const begin=performance.now();await action();const elapsed=performance.now()-begin;
   const after=process.memoryUsage().heapUsed;global.gc();const retained=process.memoryUsage().heapUsed;
-  output.push({scenario,calls,totalMs:elapsed,maxSyncMs:Math.max(0,...blocks),heapGrowthMiB:(after-before)/1048576,
+  output.push({scenario,calls,totalMs:elapsed,maxSyncMs:Math.max(0,...blocks),cpuMs:blocks.reduce((a,b)=>a+b,0),slices:blocks.length,heapGrowthMiB:(after-before)/1048576,
    retainedPluginMiB:(retained-initialHeap)/1048576,processPeakRssMiB:process.resourceUsage().maxRSS/1024,
    contentReads:reads-initialReads,redraws:redraws-initialRedraws,
    digest:crypto.createHash('sha256').update(JSON.stringify(nodes.map(node=>[node.id,node.weight]))).digest('hex')});
  }
  await measure('first',()=>plugin.recalculateSize(),1);
- await measure('idle',()=>{for(let i=0;i<10;i++)plugin.recalculateSize();},10);
- await measure('note-edit',()=>{const id=nodes[1].id;sizes.set(id,8192);plugin.invalidate(id);while(timers.length)timers.shift()();},1);
+ await measure('idle',async()=>{for(let i=0;i<10;i++){virtualOffset+=2000;await plugin.recalculateSize();}},10);
+ await measure('note-edit',async()=>{const id=nodes[1].id;sizes.set(id,8192);plugin.invalidate(id);while(timers.length)timers.shift()();if(plugin.whenIdle)await plugin.whenIdle();},1);
  await measure('folder-edit',()=>{const rule=settings.folders.find(rule=>rule.path==='Topics/T0');if(rule)rule.weight=80;else settings.folders.push({path:'Topics/T0',weight:80,recursive:true});return plugin.saveSettings();},1);
  // Link edits exercise cache correctness in both modes (including exact tree ancestors).
- await measure('link-edit',()=>{const target=Math.min(n-1,128);connect(1,target);plugin.recalculateSize();},1);
+ await measure('link-edit',()=>{const target=Math.min(n-1,128);connect(1,target);return plugin.recalculateSize();},1);
  plugin.onunload();assert.ok(nodes.every(node=>node.weight===1),'unload must restore original weights');
  return output;
 }

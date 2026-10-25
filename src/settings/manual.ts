@@ -92,7 +92,6 @@ export default class ManualSetting {
 				new Notice("New size added manually");
 
 				this.refreshDisplay();
-				this.plugin.recalculateSize();
 			});
 		});
 
@@ -112,7 +111,6 @@ export default class ManualSetting {
 					await this.plugin.saveSettings();
 
 					this.refreshDisplay();
-					this.plugin.recalculateSize();
 				});
 			});
 		});
