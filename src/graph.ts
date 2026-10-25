@@ -3,6 +3,29 @@ import type { ObsidianNode } from "./types";
 export interface GraphRenderer {
  nodes: unknown[];
  changed: () => void;
+ setData?: (...args: unknown[]) => unknown;
+}
+
+/** Observe native graph updates before the browser can draw their reset weights.
+ * Instance-only, reversible, and inert if another plugin retains our wrapper.
+ */
+export function observeGraphData(renderer: GraphRenderer, after: () => void): () => void {
+ const original = renderer.setData;
+ if (typeof original !== "function") return () => {};
+ const descriptor = Object.getOwnPropertyDescriptor(renderer, "setData");
+ let active = true;
+ const wrapped = function(this: GraphRenderer, ...args: unknown[]) {
+  const result = original.apply(this, args);
+  if (active && this === renderer) after();
+  return result;
+ };
+ renderer.setData = wrapped;
+ return () => {
+  active = false;
+  if (renderer.setData !== wrapped) return;
+  if (descriptor) Object.defineProperty(renderer, "setData", descriptor);
+  else delete renderer.setData;
+ };
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {

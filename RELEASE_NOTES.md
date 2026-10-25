@@ -1,13 +1,11 @@
-Folder Node Size 1.0.4
+Folder Node Size 1.0.5
 
-- Split graph updates into scheduled portions with a soft 4 ms budget, so other event-loop work can run between portions.
-- Reuse exact descendant counts for nodes in the same strongly connected component; preserve unique descendant counting across overlapping paths.
-- Audit tree topology on metadata/layout events, detected degree/reference changes, and periodically after 10 seconds have elapsed. Silent same-degree changes without events can wait until the next audit.
-- Cancel stale calculations on edits, hiding the app, or unloading; restore partially applied sizes and retry replaced renderers safely.
-- Add cancellation, cyclic-graph correctness and audit regression tests (47 total).
+- Fix recurring node-size flashes during the built-in graph animation: native graph data updates reset weights at each step, so known plugin sizes are now restored in the same task before the next frame.
+- Give newly revealed nodes their folder/manual sizes immediately. New automatic nodes still use the scheduled calculation.
+- Preserve visible sizes when animation invalidates an in-progress calculation, instead of repeatedly rolling them back to native sizes.
+- Restore the latest native weights and remove the renderer observer on unload or graph closure; preserve wrappers installed afterward by other plugins.
+- Keep the existing polling interval. No full automatic tree calculation runs inside the animation observer.
 
-On the synthetic 10,000-node automatic-tree fixture, median first completion improved from 3,983 ms to 300 ms. Median longest first-calculation slice improved from 3,983 ms to 5.37 ms. Ten idle checks used 530 ms versus 489 ms of synchronous processing; elapsed idle-check time increased from 531 ms to 618 ms. Retained heap after the first calculation increased from 5.39 MiB to 7.10 MiB.
+Validation: 56 automated tests, including a regression that fails on 1.0.4 and verifies 120 consecutive simulated animation steps after the fix. Build and lint pass. The reset behavior was checked against the official Obsidian 1.14.5 desktop distribution; the actual UI and mobile runtime were not available in the test environment. Please retest the built-in animation on MacBook and iPhone.
 
-These are Node host simulation results, not real Obsidian or iPhone UI measurements. Scheduling adds overhead, some subsequent updates are slower, and the 4 ms budget is not a hard limit: the largest observed candidate slice across the complete matrix was 213 ms. Long acyclic graphs can still be expensive. See benchmarks/REPORT.md for all timings, memory figures and limitations; all 540 before/after scenario samples preserved matching weights.
-
-Update through BRAT and restart Obsidian. Existing settings remain compatible. Follow-up user checks report good operation on MacBook and iPhone. Community directory submission is still pending the fork-policy requirement and account-based submission; see docs/community-submission.md.
+Update through BRAT and restart Obsidian. Existing rules remain compatible. Community directory publication remains deferred at the maintainer's request. The full graph performance report in benchmarks/REPORT.md describes 1.0.4, not this animation fix.

@@ -3,8 +3,8 @@ import { Notice, Plugin } from "obsidian";
 import { ObsidianNode, NodeFactorSettings } from "types";
 import NodeFactorSettingTab from "settings";
 import { GraphWeights } from "./weights";
-import { movedPath } from "./rules";
-import { GraphRenderer, isNode, isRenderer } from "./graph";
+import { movedPath, RuleIndex } from "./rules";
+import { GraphRenderer, isNode, isRenderer, observeGraphData } from "./graph";
 
 class StaleGraph extends Error {}
 const clock = () => typeof performance === "undefined" ? Date.now() : performance.now();
@@ -17,6 +17,9 @@ export default class NodeFactor extends Plugin {
  private originals = new Map<ObsidianNode, Original>();
  private cache = new WeakMap<GraphRenderer, GraphWeights>();
  private failed = new WeakSet<object>();
+ private graphHooks = new Map<GraphRenderer, () => void>();
+ private frameRules: RuleIndex | undefined;
+ private frameRuleRevision = -1;
  private revision = 0;
  private topologyRevision = 0;
  private job: { iterator: Generator<void, void, void>; promise: Promise<void>; resolve: () => void; applied: boolean } | undefined;
@@ -89,13 +92,55 @@ export default class NodeFactor extends Plugin {
      // An absent renderer is normal while a view is opening.
      if (renderer == null) continue;
      if (!isRenderer(renderer)) { this.warn(); continue; }
-     if (!this.failed.has(renderer)) result.push(renderer);
+     if (!this.failed.has(renderer)) {
+      if (!this.stopped && !this.graphHooks.has(renderer))
+       this.graphHooks.set(renderer, observeGraphData(renderer, () => this.onGraphData(renderer)));
+      result.push(renderer);
+     }
     } catch {
      this.warn();
     }
    }
   }
   return result;
+ }
+
+ private releaseGraphHook(renderer: GraphRenderer) {
+  const release = this.graphHooks.get(renderer);
+  this.graphHooks.delete(renderer);
+  try { release?.(); } catch { /* A closing host may freeze its renderer. */ }
+ }
+
+ private onGraphData(renderer: GraphRenderer) {
+  if (this.stopped || this.failed.has(renderer)) return;
+  // setData resets weights on every timelapse step. Keep known sizes in the
+  // same task, rather than allowing a native-size frame until the next poll.
+  this.topologyRevision++;
+  if (typeof document !== "undefined" && document.hidden) return;
+  try {
+   if (!this.frameRules || this.frameRuleRevision !== this.revision) {
+    this.frameRules = new RuleIndex(this.settings);
+    this.frameRuleRevision = this.revision;
+   }
+   let changed = false;
+   for (const node of renderer.nodes) {
+    if (!isNode(node)) throw new Error("Unsupported graph node shape");
+    const previous = this.originals.get(node);
+    // Newly revealed fixed nodes get their rule immediately. Automatic tree
+    // calculations remain in the cooperative scheduler, never in this hook.
+    const weight = previous?.applied ?? this.frameRules.weight(node.id);
+    if (weight === undefined) continue;
+    if (previous) previous.original = node.weight;
+    else this.originals.set(node, { original: node.weight, applied: weight, renderer });
+    if (node.weight !== weight) { node.weight = weight; changed = true; }
+   }
+   if (changed) renderer.changed();
+  } catch {
+   this.failed.add(renderer);
+   this.releaseGraphHook(renderer);
+   this.restore(renderer);
+   this.warn();
+  }
  }
 
  private restore(renderer?: GraphRenderer) {
@@ -158,8 +203,13 @@ export default class NodeFactor extends Plugin {
 
  private *updateGraphs(): Generator<void, void, void> {
   const live = new Set<ObsidianNode>();
-  for (const renderer of this.renderers()) {
+  const stale = new Set<GraphRenderer>();
+  const renderers = this.renderers();
+  const topologyAtStart = this.topologyRevision;
+  for (const renderer of this.graphHooks.keys()) if (!renderers.includes(renderer)) this.releaseGraphHook(renderer);
+  for (const renderer of renderers) {
    try {
+    const topologyRevision = this.topologyRevision;
     const snapshot = renderer.nodes.slice();
     const nodes: ObsidianNode[] = [];
     for (const node of snapshot) {
@@ -167,15 +217,17 @@ export default class NodeFactor extends Plugin {
      nodes.push(node);
      yield;
     }
+    if (this.topologyRevision !== topologyRevision) throw new StaleGraph();
     let cached = this.cache.get(renderer);
     if (!cached) { cached = new GraphWeights(); this.cache.set(renderer, cached); }
     const weights = yield* cached.update(nodes, this.settings, this.revision,
      id => this.contentVersions.get(id) ?? 0, this.forceRevision, this.app, this.topologyRevision, clock());
     let changed = false;
-    if (renderer.nodes.length !== nodes.length) throw new StaleGraph();
+    if (this.failed.has(renderer)) throw new Error("Incompatible graph update");
+    if (this.topologyRevision !== topologyRevision || renderer.nodes.length !== nodes.length) throw new StaleGraph();
     for (let i = 0; i < nodes.length; i++) {
      const node = nodes[i]!;
-     if (renderer.nodes[i] !== node) throw new StaleGraph();
+     if (this.topologyRevision !== topologyRevision || renderer.nodes[i] !== node) throw new StaleGraph();
      live.add(node);
      const weight = weights.get(node.id)?.weight;
      if (weight === undefined) continue;
@@ -188,14 +240,23 @@ export default class NodeFactor extends Plugin {
     }
     if (changed) renderer.changed();
    } catch (error) {
-    this.restore(renderer);
     this.cache.delete(renderer);
-    if (error instanceof StaleGraph) this.schedule();
-    else { this.failed.add(renderer); this.warn(); }
+    if (error instanceof StaleGraph) {
+     // Preserve displayed sizes while the animation changes membership; a
+     // rollback to native weights on every interrupted job causes flicker.
+     stale.add(renderer);
+     this.schedule();
+    } else {
+     this.restore(renderer); this.releaseGraphHook(renderer);
+     this.failed.add(renderer); this.warn();
+    }
    }
   }
   for (const [node, value] of this.originals) {
-   if (!live.has(node)) {
+   // A frame can reveal new nodes during the cleanup's own yields, after
+   // the snapshot was processed. Do not mistake those new nodes for detached ones.
+   const changedDuringJob = this.topologyRevision !== topologyAtStart && renderers.includes(value.renderer);
+   if (!live.has(node) && !stale.has(value.renderer) && !changedDuringJob) {
     try { if (node.weight === value.applied) node.weight = value.original; } catch { /* Detached host node. */ }
     this.originals.delete(node);
    }
@@ -208,6 +269,7 @@ export default class NodeFactor extends Plugin {
   this.cancelJob();
   if (this.pending !== undefined) window.clearTimeout(this.pending);
   const renderers = this.renderers();
+  for (const renderer of this.graphHooks.keys()) this.releaseGraphHook(renderer);
   this.restore();
   this.contentVersions.clear();
   for (const renderer of renderers) {

@@ -1,19 +1,19 @@
 # Community directory submission
 
-Status: prepared, **not submitted or approved**.
+Status: **publication deferred by the maintainer; not submitted or approved**. Local/BRAT testing and fixes continue.
 
 ## Submission details
 
 - Repository: https://github.com/Eksm1329/Obsidian-Node-size
 - Name: Folder Node Size
 - ID: `folder-node-size`
-- Current release: [1.0.4](https://github.com/Eksm1329/Obsidian-Node-size/releases/tag/1.0.4)
+- Current release: [1.0.5](https://github.com/Eksm1329/Obsidian-Node-size/releases/tag/1.0.5)
 - Description: Set graph node sizes by folder, with subfolder rules and per-note exceptions.
 - Maintainer: Eksm1329; original Node Factor contributor: CalfMoon.
 - License: MIT; original copyright and license are retained.
 - Platforms: desktop and mobile (`isDesktopOnly: false`); user reports from MacBook and iPhone are recorded in the README.
 - Release attachments verified: `main.js`, `manifest.json`, `styles.css`.
-- Validation for 1.0.4: 47 automated tests, lint and build passed; 540 before/after benchmark samples preserve matching sizes.
+- Historical validation for 1.0.4: 47 automated tests, lint and build passed; 540 before/after benchmark samples preserve matching sizes.
 
 ## Distinct functionality and implementation disclosures
 

@@ -29,6 +29,12 @@ Both global and local graphs update when settings or vault metadata change. Even
 
 If a graph renderer or node shape is incompatible, the affected renderer is skipped and one notice is shown. If updating it throws, the plugin attempts to restore its original weights and stops touching that renderer until it is recreated or the plugin is restarted. Rules are retained. These checks cannot detect every visual or semantic API change.
 
+## Graph animation
+
+Version 1.0.5 fixes repeated size flashes during the built-in **Animate** / graph timelapse command. Native graph data updates reset node weights on each step; the plugin now restores already calculated sizes before the next frame. Newly revealed nodes with folder or manual rules receive their sizes immediately. New automatic nodes are sized by the scheduled calculation; their native size can remain visible until that calculation completes. No extra polling timer is added. The observer is removed when a graph closes or the plugin unloads.
+
+The regression test reproduces the reset behavior observed in Obsidian 1.14.5's desktop implementation and fails on 1.0.4. Actual animation on desktop and iPhone still needs verification with 1.0.5; earlier general device checks did not cover this bug.
+
 ## Reported device compatibility
 
 After the 1.0.4 release, the repository owner reported that the plugin works well on both **MacBook** and **iPhone**, and authorized preparation for publication.
@@ -86,6 +92,8 @@ Large updates run in scheduled portions with a soft 4 ms budget. Native operatio
 Tree adjacency is checked on metadata/layout events, detected link-count or map-reference changes, and at the next active poll after 10 seconds since the previous audit (normally about 10–12 seconds, plus scheduling delays). A silent same-degree link edit without a metadata event may wait until that audit. Scheduling improves opportunities for other UI work, but adds overhead and does not guarantee a maximum UI stall.
 
 ## Whole-graph benchmarks
+
+The full graph performance results below were recorded for **1.0.4**, before the animation fix; they do not measure animation overhead in 1.0.5.
 
 See [the measured graph comparison](benchmarks/REPORT.md) and [raw samples](benchmarks/graphs.json) for 1,000, 5,000 and 10,000 nodes, normal and tree modes, fixed/mixed/automatic profiles, initial calculation, idle checks, note edits, folder edits and link edits. All resulting sizes are checked against the 1.0.3 baseline. The previous comparison is archived in [benchmarks/1.0.3](benchmarks/1.0.3/REPORT.md).
 
