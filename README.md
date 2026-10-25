@@ -2,15 +2,17 @@
 
 An MIT-licensed fork of [Node Factor by CalfMoon](https://github.com/calfmoon/node-factor), based on upstream commit `b04d2e77c9d4434f6971778f0ff5a28b6c4f00cd`.
 
-Set one graph size weight for every note in a folder. Rules apply to new notes too. Supports desktop and mobile Obsidian (minimum 1.8.0), with no Node.js or Electron runtime dependency. The plugin uses Obsidian's **internal graph renderer**, which can change between Obsidian versions. Automated tests use a simulated renderer. See the user-reported device check below; other platform/version combinations still need device testing.
+Set one graph size weight for every note in a folder. Rules apply to new notes too. Supports desktop and mobile Obsidian (minimum 1.8.0), with no Node.js or Electron runtime dependency. The plugin uses Obsidian's **internal graph renderer**, which can change between Obsidian versions. Automated tests use a simulated renderer. See the user-reported device checks below; other platform/version combinations still need device testing.
 
 ## Install
+
+The plugin is available through [GitHub releases](https://github.com/Eksm1329/Obsidian-Node-size/releases/latest) and BRAT. It is not yet listed in the official Community directory. See [submission status](docs/community-submission.md) for the remaining requirements.
 
 Download `main.js`, `manifest.json`, and `styles.css` from this repository's release. Put all three in `<vault>/.obsidian/plugins/folder-node-size/`. Restart Obsidian and enable **Folder Node Size** under Settings → Community plugins. Disable the original Node Factor to avoid competing graph updates.
 
 On iPhone/iPad, copy that same plugin folder into the vault using a computer and a sync method that includes hidden `.obsidian/plugins` files. If using Obsidian Sync, enable installed community plugin and plugin settings sync on the relevant devices, then restart Obsidian and enable the plugin on the phone. Sync settings and enablement may need configuring on each device. Ordinary note-only sync may not transfer plugins.
 
-Alternatively, with BRAT already installed, add `Eksm1329/Obsidian-Node-size` as a beta plugin once a release is available. This does not require this fork to be listed in Obsidian's community catalog.
+Alternatively, with BRAT already installed, add `Eksm1329/Obsidian-Node-size` as a beta plugin. To update, use BRAT’s update command and restart Obsidian; existing settings are retained. This does not require this fork to be listed in Obsidian's community catalog.
 
 ## Rules
 
@@ -29,7 +31,22 @@ If a graph renderer or node shape is incompatible, the affected renderer is skip
 
 ## Reported device compatibility
 
-The user reports that the plugin works well on an iPhone running **iOS 27.0.1** and **Obsidian 1.14.5**, following the 1.0.2 release. Versions are recorded as supplied by the user. The exact test scenarios and installed plugin version were not separately confirmed; this is a user-reported check, not an exhaustive compatibility or battery benchmark.
+After the 1.0.4 release, the repository owner reported that the plugin works well on both **MacBook** and **iPhone**, and authorized preparation for publication.
+
+| Device | User-reported result | Version details |
+|---|---|---|
+| MacBook | Works well; no problems reported. | macOS and Obsidian versions were not supplied. |
+| iPhone | Works well; no problems reported in the latest follow-up. | Earlier testing reported iOS 27.0.1 and Obsidian 1.14.5; these versions were not reconfirmed for the latest check. |
+
+These reports were made in the context of the 1.0.4 release, but the installed plugin version and individual test steps were not independently verified. They are functional user checks, not exhaustive compatibility, performance or battery benchmarks. Windows, Linux and Android have not been device-tested in this project. The declared minimum Obsidian version is not a claim that every intervening version has been tested.
+
+## Privacy and data
+
+The plugin runs locally. Its runtime makes no network requests, collects no telemetry, and requires no account or payment. It reads vault file metadata and graph links to calculate sizes; it does not edit note contents or access files outside the vault. Rules are saved in the plugin’s `data.json` through Obsidian’s plugin storage API. GitHub/BRAT installation and any vault sync are separate from the plugin runtime.
+
+## Performance expectations
+
+The published benchmarks compare plugin versions in a simulated host, not Obsidian with and without the plugin. No measured percentage increase in CPU usage, total application memory or battery consumption relative to the built-in graph is available. Device reports of smooth operation do not establish those percentages. See [whole-graph benchmarks](#whole-graph-benchmarks) for measured results and limitations.
 
 ## Verify on your devices
 

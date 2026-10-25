@@ -10,4 +10,4 @@ On the synthetic 10,000-node automatic-tree fixture, median first completion imp
 
 These are Node host simulation results, not real Obsidian or iPhone UI measurements. Scheduling adds overhead, some subsequent updates are slower, and the 4 ms budget is not a hard limit: the largest observed candidate slice across the complete matrix was 213 ms. Long acyclic graphs can still be expensive. See benchmarks/REPORT.md for all timings, memory figures and limitations; all 540 before/after scenario samples preserved matching weights.
 
-Update through BRAT and restart Obsidian. Existing settings remain compatible. Submission to the official community catalog remains pending MacBook testing.
+Update through BRAT and restart Obsidian. Existing settings remain compatible. Follow-up user checks report good operation on MacBook and iPhone. Community directory submission is still pending the fork-policy requirement and account-based submission; see docs/community-submission.md.
